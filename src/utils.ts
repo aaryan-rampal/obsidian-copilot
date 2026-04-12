@@ -1023,6 +1023,32 @@ export function cleanMessageForCopy(message: string): string {
 }
 
 /**
+ * Preserves a blockquote or callout prefix across multiline inserts.
+ * When insertion starts on a line that contains only quote markers (for example `> `),
+ * every subsequent inserted line receives the same prefix so the inserted content
+ * stays inside the existing quote structure.
+ *
+ * @param message - The message that will be inserted into the editor.
+ * @param lineTextBeforeInsertion - The current line content before the insertion point.
+ * @returns The original message when no blockquote prefix applies, otherwise a prefixed version.
+ */
+export function preserveBlockquotePrefix(message: string, lineTextBeforeInsertion: string): string {
+  if (!message.includes("\n")) {
+    return message;
+  }
+
+  const blockquotePrefixMatch = lineTextBeforeInsertion.match(/^(\s*(?:>\s?)*)$/);
+  const prefix = blockquotePrefixMatch?.[1];
+
+  if (!prefix || !prefix.includes(">")) {
+    return message;
+  }
+
+  const [firstLine, ...remainingLines] = message.split("\n");
+  return [firstLine, ...remainingLines.map((line) => `${prefix}${line}`)].join("\n");
+}
+
+/**
  * Inserts a message into the active markdown editor, optionally replacing the current selection.
  * Uses a single CM6 transaction to avoid undo stack splitting.
  * Ensures the inserted/replaced range is selected after the operation.
@@ -1047,10 +1073,13 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   const editor = leaf.view.editor;
   const cursorFrom = editor.getCursor("from");
   const cursorTo = editor.getCursor("to");
+  const changeStart = replace ? cursorFrom : cursorTo;
 
   // Clean the message before inserting (removes think tags, writeFile blocks, tool calls)
   const cleanedMessage = cleanMessageForCopy(message);
-  const cleanedLines = cleanedMessage.split("\n");
+  const lineTextBeforeInsertion = editor.getLine(changeStart.line).slice(0, changeStart.ch);
+  const preparedMessage = preserveBlockquotePrefix(cleanedMessage, lineTextBeforeInsertion);
+  const preparedLines = preparedMessage.split("\n");
 
   /** Computes the end editor position after inserting text at start position */
   const getEndPosition = (
@@ -1066,9 +1095,8 @@ export async function insertIntoEditor(message: string, replace: boolean = false
 
   /** Inserts via Obsidian Editor API (fallback when CM6 unavailable or dispatch fails) */
   const insertWithEditorAPI = (): void => {
-    const changeFrom = replace ? cursorFrom : cursorTo;
-    editor.replaceRange(cleanedMessage, changeFrom, cursorTo);
-    editor.setSelection(changeFrom, getEndPosition(changeFrom, cleanedLines));
+    editor.replaceRange(preparedMessage, changeStart, cursorTo);
+    editor.setSelection(changeStart, getEndPosition(changeStart, preparedLines));
   };
 
   /** Focuses the editor and shows success notice */
@@ -1093,7 +1121,7 @@ export async function insertIntoEditor(message: string, replace: boolean = false
 
   // Use CM6's toText to handle CRLF normalization correctly
   // (CM6 treats \r\n as single newline, so string.length would be wrong)
-  const insertText = view.state.toText(cleanedMessage);
+  const insertText = view.state.toText(preparedMessage);
   const endOffset = changeFrom + insertText.length;
 
   try {

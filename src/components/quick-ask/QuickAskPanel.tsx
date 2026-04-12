@@ -13,7 +13,7 @@ import { useModelKey } from "@/aiParams";
 import { useDraggable } from "@/hooks/use-draggable";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 import { useSettingsValue, updateSetting } from "@/settings/model";
-import { cleanMessageForCopy } from "@/utils";
+import { cleanMessageForCopy, preserveBlockquotePrefix } from "@/utils";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -214,10 +214,13 @@ export function QuickAskPanel({
       try {
         const cleaned = cleanMessageForCopy(message.content);
         const insertPos = view.state.selection.main.to;
+        const line = view.state.doc.lineAt(insertPos);
+        const lineTextBeforeInsertion = line.text.slice(0, insertPos - line.from);
+        const prepared = preserveBlockquotePrefix(cleaned, lineTextBeforeInsertion);
 
         // Reason: CM6 normalizes \r\n → \n internally, so string.length would overcount.
         // Using state.toText() ensures the length matches CM6's internal representation.
-        const insertText = view.state.toText(cleaned);
+        const insertText = view.state.toText(prepared);
 
         view.dispatch({
           changes: { from: insertPos, to: insertPos, insert: insertText },
