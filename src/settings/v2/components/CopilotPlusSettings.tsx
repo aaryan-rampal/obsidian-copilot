@@ -263,11 +263,15 @@ export const CopilotPlusSettings: React.FC = () => {
                     description="Choose which service to use for self-host web search."
                     value={settings.selfHostSearchProvider}
                     onChange={(value) =>
-                      updateSetting("selfHostSearchProvider", value as "firecrawl" | "perplexity")
+                      updateSetting(
+                        "selfHostSearchProvider",
+                        value as "firecrawl" | "perplexity" | "brave"
+                      )
                     }
                     options={[
                       { label: "Firecrawl (default)", value: "firecrawl" },
                       { label: "Perplexity Sonar", value: "perplexity" },
+                      { label: "Brave Search", value: "brave" },
                     ]}
                   />
 
@@ -314,6 +318,29 @@ export const CopilotPlusSettings: React.FC = () => {
                       value={settings.perplexityApiKey}
                       onChange={(value) => updateSetting("perplexityApiKey", value)}
                       placeholder="pplx-..."
+                    />
+                  )}
+
+                  {settings.selfHostSearchProvider === "brave" && (
+                    <SettingItem
+                      type="password"
+                      title="Brave Search API Key"
+                      description={
+                        <span>
+                          API key for web search via Brave Search API.{" "}
+                          <a
+                            href="https://brave.com/search/api/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="tw-text-accent"
+                          >
+                            Get API key &rarr;
+                          </a>
+                        </span>
+                      }
+                      value={settings.braveApiKey}
+                      onChange={(value) => updateSetting("braveApiKey", value)}
+                      placeholder="BSA..."
                     />
                   )}
 

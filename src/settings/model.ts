@@ -144,11 +144,13 @@ export interface CopilotSettings {
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
   /** Which provider to use for self-host web search */
-  selfHostSearchProvider: "firecrawl" | "perplexity";
+  selfHostSearchProvider: "firecrawl" | "perplexity" | "brave";
   /** Firecrawl API key for self-host web search */
   firecrawlApiKey: string;
   /** Perplexity API key for self-host web search via Sonar */
   perplexityApiKey: string;
+  /** Brave Search API key for self-host web search */
+  braveApiKey: string;
   /** Supadata API key for self-host YouTube transcripts */
   supadataApiKey: string;
   /** Enable lexical boosts (folder and graph) in search - default: true */
@@ -444,7 +446,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   // Ensure selfHostSearchProvider is a valid value
-  const validSearchProviders = ["firecrawl", "perplexity"] as const;
+  const validSearchProviders = ["firecrawl", "perplexity", "brave"] as const;
   if (
     !validSearchProviders.includes(
       sanitizedSettings.selfHostSearchProvider as (typeof validSearchProviders)[number]

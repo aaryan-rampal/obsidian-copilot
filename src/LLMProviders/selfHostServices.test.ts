@@ -28,6 +28,7 @@ beforeEach(() => {
     selfHostSearchProvider: "firecrawl",
     firecrawlApiKey: "fc-test-key",
     perplexityApiKey: "",
+    braveApiKey: "",
     supadataApiKey: "",
   });
 });
@@ -40,6 +41,7 @@ describe("hasSelfHostSearchKey", () => {
       selfHostSearchProvider: "firecrawl",
       firecrawlApiKey: "fc-key",
       perplexityApiKey: "",
+      braveApiKey: "",
     });
     expect(hasSelfHostSearchKey()).toBe(true);
   });
@@ -49,6 +51,7 @@ describe("hasSelfHostSearchKey", () => {
       selfHostSearchProvider: "firecrawl",
       firecrawlApiKey: "",
       perplexityApiKey: "pplx-key",
+      braveApiKey: "",
     });
     expect(hasSelfHostSearchKey()).toBe(false);
   });
@@ -58,6 +61,7 @@ describe("hasSelfHostSearchKey", () => {
       selfHostSearchProvider: "perplexity",
       firecrawlApiKey: "",
       perplexityApiKey: "pplx-key",
+      braveApiKey: "",
     });
     expect(hasSelfHostSearchKey()).toBe(true);
   });
@@ -67,6 +71,27 @@ describe("hasSelfHostSearchKey", () => {
       selfHostSearchProvider: "perplexity",
       firecrawlApiKey: "fc-key",
       perplexityApiKey: "",
+      braveApiKey: "",
+    });
+    expect(hasSelfHostSearchKey()).toBe(false);
+  });
+
+  it("returns true when brave provider has a key", () => {
+    mockGetSettings.mockReturnValue({
+      selfHostSearchProvider: "brave",
+      firecrawlApiKey: "",
+      perplexityApiKey: "",
+      braveApiKey: "bsa-key",
+    });
+    expect(hasSelfHostSearchKey()).toBe(true);
+  });
+
+  it("returns false when brave provider has no key", () => {
+    mockGetSettings.mockReturnValue({
+      selfHostSearchProvider: "brave",
+      firecrawlApiKey: "",
+      perplexityApiKey: "",
+      braveApiKey: "",
     });
     expect(hasSelfHostSearchKey()).toBe(false);
   });
@@ -76,6 +101,7 @@ describe("hasSelfHostSearchKey", () => {
       selfHostSearchProvider: "unknown",
       firecrawlApiKey: "fc-key",
       perplexityApiKey: "",
+      braveApiKey: "",
     });
     expect(hasSelfHostSearchKey()).toBe(true);
   });
@@ -89,6 +115,7 @@ describe("selfHostWebSearch — Firecrawl", () => {
       selfHostSearchProvider: "firecrawl",
       firecrawlApiKey: "fc-test-key",
       perplexityApiKey: "",
+      braveApiKey: "",
     });
   });
 
@@ -189,6 +216,7 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
       selfHostSearchProvider: "perplexity",
       firecrawlApiKey: "",
       perplexityApiKey: "pplx-test-key",
+      braveApiKey: "",
     });
   });
 
@@ -270,6 +298,93 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
   });
 });
 
+// --- Brave Search ---
+
+describe("selfHostWebSearch — Brave Search", () => {
+  beforeEach(() => {
+    mockGetSettings.mockReturnValue({
+      selfHostSearchProvider: "brave",
+      firecrawlApiKey: "",
+      perplexityApiKey: "",
+      braveApiKey: "bsa-test-key",
+    });
+  });
+
+  it("parses Brave web results and strips snippet markup", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        web: {
+          results: [
+            {
+              title: "Result 1",
+              description: "Learn <strong>TypeScript</strong> basics",
+              url: "https://example.com/1",
+            },
+            {
+              title: "Result 2",
+              description: "Advanced topics",
+              url: "https://example.com/2",
+            },
+          ],
+        },
+      }),
+    });
+
+    const result = await selfHostWebSearch("typescript");
+
+    expect(result.citations).toEqual(["https://example.com/1", "https://example.com/2"]);
+    expect(result.content).toContain("### Result 1");
+    expect(result.content).toContain("Learn TypeScript basics");
+    expect(result.content).not.toContain("<strong>");
+  });
+
+  it("returns empty results for malformed Brave payloads", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ web: { results: "not-an-array" } }),
+    });
+
+    const result = await selfHostWebSearch("typescript");
+
+    expect(result.content).toBe("");
+    expect(result.citations).toEqual([]);
+  });
+
+  it("throws on Brave HTTP errors", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      text: async () => "Forbidden",
+    });
+
+    await expect(selfHostWebSearch("typescript")).rejects.toThrow(
+      "Brave search failed (403): Forbidden"
+    );
+  });
+
+  it("sends correct request format for Brave web search", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ web: { results: [] } }),
+    });
+
+    await selfHostWebSearch("my query");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.search.brave.com/res/v1/web/search?q=my+query&count=5",
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Accept-Encoding": "gzip",
+          "X-Subscription-Token": "bsa-test-key",
+        },
+      }
+    );
+  });
+});
+
 // --- Provider dispatch ---
 
 describe("selfHostWebSearch — provider dispatch", () => {
@@ -278,6 +393,7 @@ describe("selfHostWebSearch — provider dispatch", () => {
       selfHostSearchProvider: "firecrawl",
       firecrawlApiKey: "fc-key",
       perplexityApiKey: "",
+      braveApiKey: "",
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -297,6 +413,7 @@ describe("selfHostWebSearch — provider dispatch", () => {
       selfHostSearchProvider: "perplexity",
       firecrawlApiKey: "",
       perplexityApiKey: "pplx-key",
+      braveApiKey: "",
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -311,11 +428,32 @@ describe("selfHostWebSearch — provider dispatch", () => {
     );
   });
 
+  it("routes to Brave URL when provider is brave", async () => {
+    mockGetSettings.mockReturnValue({
+      selfHostSearchProvider: "brave",
+      firecrawlApiKey: "",
+      perplexityApiKey: "",
+      braveApiKey: "bsa-key",
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ web: { results: [] } }),
+    });
+
+    await selfHostWebSearch("test");
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.search.brave.com/res/v1/web/search?q=test&count=5",
+      expect.any(Object)
+    );
+  });
+
   it("defaults to Firecrawl for unknown provider value", async () => {
     mockGetSettings.mockReturnValue({
       selfHostSearchProvider: "unknown-provider",
       firecrawlApiKey: "fc-key",
       perplexityApiKey: "",
+      braveApiKey: "",
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,

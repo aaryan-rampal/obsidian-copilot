@@ -5,6 +5,7 @@ import { getSettings } from "@/settings/model";
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
+const BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search";
 const SUPADATA_TRANSCRIPT_URL = "https://api.supadata.ai/v1/transcript";
 
 /** Poll interval for Supadata async jobs (ms) */
@@ -24,12 +25,33 @@ interface FirecrawlSearchResult {
   url?: string;
 }
 
+interface BraveSearchResultItem {
+  title?: string;
+  description?: string;
+  url?: string;
+}
+
+interface BraveSearchResponse {
+  web?: {
+    results?: BraveSearchResultItem[];
+  };
+}
+
+/**
+ * Remove lightweight HTML markup from provider result snippets.
+ */
+function stripHtmlTags(text: string): string {
+  return text.replace(/<[^>]+>/g, "");
+}
+
 /**
  * Check whether the currently selected self-host search provider has an API key configured.
  */
 export function hasSelfHostSearchKey(): boolean {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
+    case "brave":
+      return !!settings.braveApiKey;
     case "perplexity":
       return !!settings.perplexityApiKey;
     case "firecrawl":
@@ -120,12 +142,53 @@ async function perplexitySonarSearch(
 }
 
 /**
+ * Web search via Brave Search API.
+ */
+async function braveSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
+  const response = await fetch(
+    `${BRAVE_SEARCH_URL}?${new URLSearchParams({ q: query, count: "5" })}`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Accept-Encoding": "gzip",
+        "X-Subscription-Token": apiKey,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Brave search failed (${response.status}): ${text}`);
+  }
+
+  const json = (await response.json()) as BraveSearchResponse;
+  const results = Array.isArray(json?.web?.results) ? json.web.results : [];
+  const contentParts: string[] = [];
+  const citations: string[] = [];
+
+  for (const item of results) {
+    const title = item.title || "Untitled";
+    const description = stripHtmlTags(item.description || "");
+    const url = item.url || "";
+    contentParts.push(`### ${title}\n${description}\nSource: ${url}`);
+    if (url) {
+      citations.push(url);
+    }
+  }
+
+  return { content: contentParts.join("\n\n"), citations };
+}
+
+/**
  * Dispatch self-host web search to the provider selected in settings.
  * Returns content + citations directly without the legacy Perplexity wrapper.
  */
 export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearchResult> {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
+    case "brave":
+      return braveSearch(query, await getDecryptedKey(settings.braveApiKey));
     case "perplexity":
       return perplexitySonarSearch(query, await getDecryptedKey(settings.perplexityApiKey));
     case "firecrawl":
