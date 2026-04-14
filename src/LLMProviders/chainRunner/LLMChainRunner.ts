@@ -2,12 +2,20 @@ import { ABORT_REASON, ModelCapability } from "@/constants";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { webSearchTool } from "@/tools/SearchTools";
+import { ToolManager } from "@/tools/toolManager";
+import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ChatMessage } from "@/types/message";
-import { findCustomModel, withSuppressedTokenWarnings } from "@/utils";
+import { extractChatHistory, findCustomModel, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import {
+  buildWebSearchContextMessage,
+  hasWebCommand,
+  removeWebCommands,
+} from "./utils/webCommandUtils";
 import { getModelKey } from "@/aiParams";
 
 export class LLMChainRunner extends BaseChainRunner {
@@ -15,7 +23,11 @@ export class LLMChainRunner extends BaseChainRunner {
    * Construct messages array using envelope-based context (L1-L5 layers)
    * Requires context envelope - throws error if unavailable
    */
-  private async constructMessages(userMessage: ChatMessage): Promise<any[]> {
+  private async constructMessages(
+    userMessage: ChatMessage,
+    userMessageOverride?: string,
+    supplementalMessages: any[] = []
+  ): Promise<any[]> {
     // Require envelope for LLM chain
     if (!userMessage.contextEnvelope) {
       throw new Error(
@@ -40,6 +52,8 @@ export class LLMChainRunner extends BaseChainRunner {
       messages.push(systemMessage);
     }
 
+    messages.push(...supplementalMessages);
+
     // Add chat history (L4)
     const memory = this.chainManager.memoryManager.getMemory();
     await loadAndAddChatHistory(memory, messages);
@@ -52,7 +66,7 @@ export class LLMChainRunner extends BaseChainRunner {
         // Merge envelope text with multimodal content (images)
         const updatedContent = userMessage.content.map((item: any) => {
           if (item.type === "text") {
-            return { ...item, text: userMessageContent.content };
+            return { ...item, text: userMessageOverride || userMessageContent.content };
           }
           return item;
         });
@@ -61,11 +75,60 @@ export class LLMChainRunner extends BaseChainRunner {
           content: updatedContent,
         });
       } else {
-        messages.push(userMessageContent);
+        messages.push({
+          ...userMessageContent,
+          content: userMessageOverride || userMessageContent.content,
+        });
       }
     }
 
     return messages;
+  }
+
+  /**
+   * Build supplemental prompt context for an explicit `@web` command in LLM mode.
+   *
+   * @param rawUserMessage - Raw user message text.
+   * @returns Cleaned user message and supplemental prompt messages.
+   */
+  private async buildWebCommandPromptContext(rawUserMessage: string): Promise<{
+    cleanedUserMessage: string;
+    supplementalMessages: Array<{ role: string; content: string }>;
+  }> {
+    if (!hasWebCommand(rawUserMessage)) {
+      return {
+        cleanedUserMessage: rawUserMessage,
+        supplementalMessages: [],
+      };
+    }
+
+    const cleanedUserMessage = removeWebCommands(rawUserMessage);
+    const memory = this.chainManager.memoryManager.getMemory();
+    const memoryVariables = await memory.loadMemoryVariables({});
+    const chatHistory = extractChatHistory(memoryVariables);
+
+    logInfo("[LLMChainRunner] Executing forced @web command", {
+      query: cleanedUserMessage,
+    });
+
+    const toolOutput = await ToolManager.callTool(webSearchTool, {
+      query: cleanedUserMessage,
+      chatHistory,
+    });
+    const formattedToolOutput = ToolResultFormatter.format(
+      "webSearch",
+      typeof toolOutput === "string" ? toolOutput : JSON.stringify(toolOutput)
+    );
+
+    return {
+      cleanedUserMessage,
+      supplementalMessages: [
+        {
+          role: "system",
+          content: buildWebSearchContextMessage(formattedToolOutput),
+        },
+      ],
+    };
   }
 
   async run(
@@ -99,8 +162,17 @@ export class LLMChainRunner extends BaseChainRunner {
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
 
     try {
+      const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
+      const rawUserMessage = l5Text || userMessage.originalMessage || userMessage.message;
+      const { cleanedUserMessage, supplementalMessages } =
+        await this.buildWebCommandPromptContext(rawUserMessage);
+
       // Construct messages using envelope or legacy approach
-      const messages = await this.constructMessages(userMessage);
+      const messages = await this.constructMessages(
+        userMessage,
+        cleanedUserMessage,
+        supplementalMessages
+      );
 
       // Record the payload for debugging (includes layered view if envelope available)
       const chatModel = this.chainManager.chatModelManager.getChatModel();

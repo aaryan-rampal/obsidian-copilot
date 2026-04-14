@@ -1,4 +1,8 @@
-import { hasSelfHostSearchKey, selfHostWebSearch } from "./selfHostServices";
+import {
+  canUseConfiguredWebSearchProvider,
+  hasSelfHostSearchKey,
+  selfHostWebSearch,
+} from "./selfHostServices";
 
 // --- Mocks ---
 
@@ -17,9 +21,10 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-// Mock global fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+const mockSafeFetch = jest.fn();
+jest.mock("@/utils", () => ({
+  safeFetch: (...args: unknown[]) => mockSafeFetch(...args),
+}));
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -107,6 +112,30 @@ describe("hasSelfHostSearchKey", () => {
   });
 });
 
+describe("canUseConfiguredWebSearchProvider", () => {
+  it("returns true when brave is selected and has a configured key", () => {
+    mockGetSettings.mockReturnValue({
+      selfHostSearchProvider: "brave",
+      firecrawlApiKey: "",
+      perplexityApiKey: "",
+      braveApiKey: "bsa-key",
+    });
+
+    expect(canUseConfiguredWebSearchProvider()).toBe(true);
+  });
+
+  it("returns false when the selected provider has no configured key", () => {
+    mockGetSettings.mockReturnValue({
+      selfHostSearchProvider: "brave",
+      firecrawlApiKey: "fc-key",
+      perplexityApiKey: "",
+      braveApiKey: "",
+    });
+
+    expect(canUseConfiguredWebSearchProvider()).toBe(false);
+  });
+});
+
 // --- Firecrawl search ---
 
 describe("selfHostWebSearch — Firecrawl", () => {
@@ -120,7 +149,7 @@ describe("selfHostWebSearch — Firecrawl", () => {
   });
 
   it("parses v2 data.web format", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: {
@@ -140,7 +169,7 @@ describe("selfHostWebSearch — Firecrawl", () => {
   });
 
   it("falls back to data array for older responses", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         data: [{ title: "Old", description: "Old desc", url: "https://old.com" }],
@@ -154,7 +183,7 @@ describe("selfHostWebSearch — Firecrawl", () => {
   });
 
   it("returns empty results for malformed data", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: "not an array or object" }),
     });
@@ -166,7 +195,7 @@ describe("selfHostWebSearch — Firecrawl", () => {
   });
 
   it("throws on HTTP errors", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
       text: async () => "Unauthorized",
@@ -178,7 +207,7 @@ describe("selfHostWebSearch — Firecrawl", () => {
   });
 
   it("handles empty results array", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { web: [] } }),
     });
@@ -190,14 +219,14 @@ describe("selfHostWebSearch — Firecrawl", () => {
   });
 
   it("sends correct request format", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { web: [] } }),
     });
 
     await selfHostWebSearch("my query");
 
-    expect(mockFetch).toHaveBeenCalledWith("https://api.firecrawl.dev/v2/search", {
+    expect(mockSafeFetch).toHaveBeenCalledWith("https://api.firecrawl.dev/v2/search", {
       method: "POST",
       headers: {
         Authorization: "Bearer fc-test-key",
@@ -221,7 +250,7 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
   });
 
   it("parses standard Sonar response", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         choices: [{ message: { content: "Here is the answer about AI." } }],
@@ -236,7 +265,7 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
   });
 
   it("handles missing citations", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         choices: [{ message: { content: "Some answer" } }],
@@ -250,7 +279,7 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
   });
 
   it("handles empty choices", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         choices: [],
@@ -265,7 +294,7 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
   });
 
   it("throws on HTTP errors", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: false,
       status: 429,
       text: async () => "Rate limited",
@@ -277,14 +306,14 @@ describe("selfHostWebSearch — Perplexity Sonar", () => {
   });
 
   it("sends correct request format with model=sonar", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ choices: [{ message: { content: "" } }], citations: [] }),
     });
 
     await selfHostWebSearch("my query");
 
-    expect(mockFetch).toHaveBeenCalledWith("https://api.perplexity.ai/chat/completions", {
+    expect(mockSafeFetch).toHaveBeenCalledWith("https://api.perplexity.ai/chat/completions", {
       method: "POST",
       headers: {
         Authorization: "Bearer pplx-test-key",
@@ -311,7 +340,7 @@ describe("selfHostWebSearch — Brave Search", () => {
   });
 
   it("parses Brave web results and strips snippet markup", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         web: {
@@ -340,7 +369,7 @@ describe("selfHostWebSearch — Brave Search", () => {
   });
 
   it("returns empty results for malformed Brave payloads", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ web: { results: "not-an-array" } }),
     });
@@ -352,7 +381,7 @@ describe("selfHostWebSearch — Brave Search", () => {
   });
 
   it("throws on Brave HTTP errors", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: false,
       status: 403,
       text: async () => "Forbidden",
@@ -364,14 +393,14 @@ describe("selfHostWebSearch — Brave Search", () => {
   });
 
   it("sends correct request format for Brave web search", async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ web: { results: [] } }),
     });
 
     await selfHostWebSearch("my query");
 
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockSafeFetch).toHaveBeenCalledWith(
       "https://api.search.brave.com/res/v1/web/search?q=my+query&count=5",
       {
         method: "GET",
@@ -395,14 +424,14 @@ describe("selfHostWebSearch — provider dispatch", () => {
       perplexityApiKey: "",
       braveApiKey: "",
     });
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { web: [] } }),
     });
 
     await selfHostWebSearch("test");
 
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockSafeFetch).toHaveBeenCalledWith(
       "https://api.firecrawl.dev/v2/search",
       expect.any(Object)
     );
@@ -415,14 +444,14 @@ describe("selfHostWebSearch — provider dispatch", () => {
       perplexityApiKey: "pplx-key",
       braveApiKey: "",
     });
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ choices: [{ message: { content: "" } }], citations: [] }),
     });
 
     await selfHostWebSearch("test");
 
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockSafeFetch).toHaveBeenCalledWith(
       "https://api.perplexity.ai/chat/completions",
       expect.any(Object)
     );
@@ -435,14 +464,14 @@ describe("selfHostWebSearch — provider dispatch", () => {
       perplexityApiKey: "",
       braveApiKey: "bsa-key",
     });
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ web: { results: [] } }),
     });
 
     await selfHostWebSearch("test");
 
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockSafeFetch).toHaveBeenCalledWith(
       "https://api.search.brave.com/res/v1/web/search?q=test&count=5",
       expect.any(Object)
     );
@@ -455,14 +484,14 @@ describe("selfHostWebSearch — provider dispatch", () => {
       perplexityApiKey: "",
       braveApiKey: "",
     });
-    mockFetch.mockResolvedValueOnce({
+    mockSafeFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ data: { web: [] } }),
     });
 
     await selfHostWebSearch("test");
 
-    expect(mockFetch).toHaveBeenCalledWith(
+    expect(mockSafeFetch).toHaveBeenCalledWith(
       "https://api.firecrawl.dev/v2/search",
       expect.any(Object)
     );

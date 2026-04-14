@@ -100,6 +100,99 @@ export const CopilotPlusSettings: React.FC = () => {
           </Badge>
         </div>
         <div className="tw-flex tw-flex-col tw-gap-4">
+          {isSelfHostEligible === false && (
+            <>
+              <div className="tw-pt-4 tw-text-xl tw-font-semibold">Direct Web Search</div>
+
+              <SettingItem
+                type="select"
+                title="Web Search Provider"
+                description="Use your own web-search provider for the webSearch tool without enabling full self-host mode. Intended for local and custom setups."
+                value={settings.selfHostSearchProvider}
+                onChange={(value) =>
+                  updateSetting(
+                    "selfHostSearchProvider",
+                    value as "firecrawl" | "perplexity" | "brave"
+                  )
+                }
+                options={[
+                  { label: "Firecrawl", value: "firecrawl" },
+                  { label: "Perplexity Sonar", value: "perplexity" },
+                  { label: "Brave Search", value: "brave" },
+                ]}
+              />
+
+              {settings.selfHostSearchProvider === "firecrawl" && (
+                <SettingItem
+                  type="password"
+                  title="Firecrawl API Key"
+                  description={
+                    <span>
+                      API key for direct web search via Firecrawl.{" "}
+                      <a
+                        href="https://firecrawl.link/logan-yang"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tw-text-accent"
+                      >
+                        Sign up &rarr;
+                      </a>
+                    </span>
+                  }
+                  value={settings.firecrawlApiKey}
+                  onChange={(value) => updateSetting("firecrawlApiKey", value)}
+                  placeholder="fc-..."
+                />
+              )}
+
+              {settings.selfHostSearchProvider === "perplexity" && (
+                <SettingItem
+                  type="password"
+                  title="Perplexity API Key"
+                  description={
+                    <span>
+                      API key for direct web search via Perplexity Sonar.{" "}
+                      <a
+                        href="https://docs.perplexity.ai"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tw-text-accent"
+                      >
+                        Get API key &rarr;
+                      </a>
+                    </span>
+                  }
+                  value={settings.perplexityApiKey}
+                  onChange={(value) => updateSetting("perplexityApiKey", value)}
+                  placeholder="pplx-..."
+                />
+              )}
+
+              {settings.selfHostSearchProvider === "brave" && (
+                <SettingItem
+                  type="password"
+                  title="Brave Search API Key"
+                  description={
+                    <span>
+                      API key for direct web search via Brave Search API.{" "}
+                      <a
+                        href="https://brave.com/search/api/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tw-text-accent"
+                      >
+                        Get API key &rarr;
+                      </a>
+                    </span>
+                  }
+                  value={settings.braveApiKey}
+                  onChange={(value) => updateSetting("braveApiKey", value)}
+                  placeholder="BSA..."
+                />
+              )}
+            </>
+          )}
+
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autonomous Agent</div>
 
           <SettingItem
