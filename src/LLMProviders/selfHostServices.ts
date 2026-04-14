@@ -2,6 +2,7 @@ import { type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { safeFetch } from "@/utils";
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
@@ -61,13 +62,23 @@ export function hasSelfHostSearchKey(): boolean {
 }
 
 /**
+ * Check whether web search can use the configured provider directly.
+ *
+ * This is intentionally narrower than full self-host mode and only covers
+ * provider-backed web search when the selected provider has a configured key.
+ */
+export function canUseConfiguredWebSearchProvider(): boolean {
+  return hasSelfHostSearchKey();
+}
+
+/**
  * Web search via Firecrawl direct API (self-host mode).
  * Handles both v2 `data.web` format and older flat `data` array.
  */
 async function firecrawlSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
   const startTime = Date.now();
 
-  const response = await fetch(FIRECRAWL_SEARCH_URL, {
+  const response = await safeFetch(FIRECRAWL_SEARCH_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -117,7 +128,7 @@ async function perplexitySonarSearch(
   query: string,
   apiKey: string
 ): Promise<SelfHostWebSearchResult> {
-  const response = await fetch(PERPLEXITY_CHAT_URL, {
+  const response = await safeFetch(PERPLEXITY_CHAT_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -145,7 +156,7 @@ async function perplexitySonarSearch(
  * Web search via Brave Search API.
  */
 async function braveSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${BRAVE_SEARCH_URL}?${new URLSearchParams({ q: query, count: "5" })}`,
     {
       method: "GET",

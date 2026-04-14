@@ -1,7 +1,10 @@
 import { getStandaloneQuestion } from "@/chainUtils";
 import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { hasSelfHostSearchKey, selfHostWebSearch } from "@/LLMProviders/selfHostServices";
+import {
+  canUseConfiguredWebSearchProvider,
+  selfHostWebSearch,
+} from "@/LLMProviders/selfHostServices";
 import { logInfo } from "@/logger";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { isSelfHostModeValid } from "@/plusUtils";
@@ -566,7 +569,7 @@ const webSearchTool = createLangChainTool({
       let webContent: string;
       let citations: string[];
 
-      if (isSelfHostModeValid() && hasSelfHostSearchKey()) {
+      if (isSelfHostModeValid() || canUseConfiguredWebSearchProvider()) {
         const result = await selfHostWebSearch(standaloneQuestion);
         webContent = result.content;
         citations = result.citations;
