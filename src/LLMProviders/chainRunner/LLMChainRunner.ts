@@ -20,6 +20,42 @@ import { getModelKey } from "@/aiParams";
 
 export class LLMChainRunner extends BaseChainRunner {
   /**
+   * Apply a cleaned user-query override while preserving any merged context prefix.
+   * This is used for `@web` command stripping so L3 context remains attached.
+   */
+  private applyUserMessageOverride(
+    mergedUserContent: string,
+    userMessage: ChatMessage,
+    userMessageOverride?: string
+  ): string {
+    if (!userMessageOverride) {
+      return mergedUserContent;
+    }
+
+    const l5Text = userMessage.contextEnvelope?.layers.find(
+      (layer) => layer.id === "L5_USER"
+    )?.text;
+    if (!l5Text) {
+      return userMessageOverride;
+    }
+
+    if (mergedUserContent === l5Text) {
+      return userMessageOverride;
+    }
+
+    const trailingUserTextIndex = mergedUserContent.lastIndexOf(l5Text);
+    const endsWithOriginalUserText =
+      trailingUserTextIndex !== -1 &&
+      trailingUserTextIndex + l5Text.length === mergedUserContent.length;
+
+    if (!endsWithOriginalUserText) {
+      return mergedUserContent;
+    }
+
+    return mergedUserContent.slice(0, trailingUserTextIndex) + userMessageOverride;
+  }
+
+  /**
    * Construct messages array using envelope-based context (L1-L5 layers)
    * Requires context envelope - throws error if unavailable
    */
@@ -61,12 +97,18 @@ export class LLMChainRunner extends BaseChainRunner {
     // Add user message (L2+L3+L5 merged)
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
+      const finalUserContent = this.applyUserMessageOverride(
+        userMessageContent.content,
+        userMessage,
+        userMessageOverride
+      );
+
       // Handle multimodal content if present
       if (userMessage.content && Array.isArray(userMessage.content)) {
         // Merge envelope text with multimodal content (images)
         const updatedContent = userMessage.content.map((item: any) => {
           if (item.type === "text") {
-            return { ...item, text: userMessageOverride || userMessageContent.content };
+            return { ...item, text: finalUserContent };
           }
           return item;
         });
@@ -77,7 +119,7 @@ export class LLMChainRunner extends BaseChainRunner {
       } else {
         messages.push({
           ...userMessageContent,
-          content: userMessageOverride || userMessageContent.content,
+          content: finalUserContent,
         });
       }
     }
