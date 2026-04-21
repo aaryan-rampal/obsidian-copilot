@@ -12,8 +12,8 @@ import { getSettings } from "@/settings/model";
 import { getDomainFromUrl, safeFetch } from "@/utils";
 import { Readability } from "@mozilla/readability";
 import { z } from "zod";
-import { createLangChainTool } from "./createLangChainTool";
-import { webRetrievalState } from "./webRetrievalState";
+import { createLangChainTool } from "@/tools/createLangChainTool";
+import { webRetrievalState } from "@/tools/webRetrievalState";
 
 // ============================================================================
 // Types
