@@ -54,6 +54,8 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
+import { ResearchingPill } from "@/components/chat-components/ResearchingPill";
+import { webRetrievalState } from "@/tools/webRetrievalState";
 
 type ChatMode = "default" | "project";
 
@@ -128,6 +130,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
   const [indexingCardVisible, setIndexingCardVisible] = useState<boolean | null>(null);
   const [indexingState] = useIndexingProgress();
+  const [researchFetchLog, setResearchFetchLog] = useState<string[]>([]);
+  const [isResearching, setIsResearching] = useState(false);
 
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(false);
@@ -231,6 +235,21 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       setLatestTokenCount(null);
     }
   }, [chatHistory]);
+
+  // Poll webRetrievalState at 200ms to keep the ResearchingPill in sync.
+  // webRetrievalState is a plain object (not reactive), so polling is required.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsResearching(webRetrievalState.activeFetchCount > 0);
+      setResearchFetchLog([...webRetrievalState.fetchLog]);
+    }, 200);
+    return () => clearInterval(interval);
+  }, []);
+
+  /** Signals the active web-retrieval session to stop after the current fetches complete. */
+  const handleStopResearching = useCallback(() => {
+    webRetrievalState.terminateRequested = true;
+  }, []);
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
@@ -906,6 +925,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onOpenSourceFile={handleOpenSourceFile}
               latestTokenCount={latestTokenCount}
             />
+            {isResearching && (
+              <ResearchingPill fetchLog={researchFetchLog} onStop={handleStopResearching} />
+            )}
             <ChatInput
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
