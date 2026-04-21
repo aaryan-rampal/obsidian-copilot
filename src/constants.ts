@@ -125,6 +125,7 @@ export const LLM_TIMEOUT_MS = 30000; // 30 seconds timeout for LLM operations
 export const DEFAULT_MAX_SOURCE_CHUNKS = 30; // Default max chunks for search results (with diverse top-K)
 export const AGENT_LOOP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for agent loop
 export const AGENT_MAX_ITERATIONS_LIMIT = 16; // Maximum allowed value for agent iterations setting
+export const WEB_RETRIEVAL_MAX_PARALLEL_FETCH_LIMIT = 10; // Maximum allowed value for parallel web fetch setting
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -977,6 +978,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentMaxIterations: 4,
+  webRetrievalParallelFetchLimit: 3,
   autonomousAgentEnabledToolIds: [
     "localSearch",
     "readNote",
