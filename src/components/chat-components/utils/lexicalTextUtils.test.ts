@@ -8,7 +8,7 @@ jest.mock("@/logger", () => ({
 
 // Mock the AVAILABLE_TOOLS constant
 jest.mock("../constants/tools", () => ({
-  AVAILABLE_TOOLS: ["@vault", "@websearch", "@composer"],
+  AVAILABLE_TOOLS: ["@vault", "@websearch", "@web", "@composer"],
 }));
 
 // Create mock global app object
@@ -209,6 +209,27 @@ describe("parseTextForPills", () => {
         {
           type: "text",
           content: " tool",
+        },
+      ]);
+    });
+
+    it("should parse @web alias references", () => {
+      const text = "Use @web to search the internet";
+      const result = parseTextForPills(text, { includeTools: true });
+
+      expect(result).toEqual([
+        {
+          type: "text",
+          content: "Use ",
+        },
+        {
+          type: "tool-pill",
+          content: "@web",
+          toolName: "@web",
+        },
+        {
+          type: "text",
+          content: " to search the internet",
         },
       ]);
     });

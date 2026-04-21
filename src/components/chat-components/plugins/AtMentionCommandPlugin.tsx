@@ -36,7 +36,7 @@ export function AtMentionCommandPlugin({
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
   // Use the shared at-mention categories hook
-  const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
+  const availableCategoryOptions = useAtMentionCategories();
 
   // Load note content for preview using shared utilities
   const loadNoteContentForPreview = useCallback(async (file: TFile) => {
