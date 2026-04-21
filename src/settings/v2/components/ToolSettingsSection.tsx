@@ -1,6 +1,6 @@
 import React from "react";
 import { SettingItem } from "@/components/ui/setting-item";
-import { AGENT_MAX_ITERATIONS_LIMIT } from "@/constants";
+import { AGENT_MAX_ITERATIONS_LIMIT, WEB_RETRIEVAL_MAX_PARALLEL_FETCH_LIMIT } from "@/constants";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ToolDefinition } from "@/tools/ToolRegistry";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -112,6 +112,19 @@ export const ToolSettingsSection: React.FC = () => {
         }}
         min={4}
         max={AGENT_MAX_ITERATIONS_LIMIT}
+        step={1}
+      />
+
+      <SettingItem
+        type="slider"
+        title="Max Parallel Web Fetches"
+        description="Maximum number of web pages the agent can fetch simultaneously in one fetchWebPages call."
+        value={settings.webRetrievalParallelFetchLimit ?? 3}
+        onChange={(value) => {
+          updateSetting("webRetrievalParallelFetchLimit", value);
+        }}
+        min={1}
+        max={WEB_RETRIEVAL_MAX_PARALLEL_FETCH_LIMIT}
         step={1}
       />
 

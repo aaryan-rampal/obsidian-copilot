@@ -6,6 +6,7 @@ import { type ChainType } from "@/chainFactory";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
   AGENT_MAX_ITERATIONS_LIMIT,
+  WEB_RETRIEVAL_MAX_PARALLEL_FETCH_LIMIT,
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
   COPILOT_FOLDER_ROOT,
@@ -165,6 +166,8 @@ export interface CopilotSettings {
   /** Whether we have suggested built-in default commands to the user once. */
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
+  /** Maximum number of web pages the agent can fetch simultaneously in one fetchWebPages call. */
+  webRetrievalParallelFetchLimit: number;
   autonomousAgentEnabledToolIds: string[];
   /** Default reasoning effort for models that support it (GPT-5, O-series, etc.) */
   reasoningEffort: "minimal" | "low" | "medium" | "high";
@@ -480,6 +483,19 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autonomousAgentMaxIterations = DEFAULT_SETTINGS.autonomousAgentMaxIterations;
   } else {
     sanitizedSettings.autonomousAgentMaxIterations = autonomousAgentMaxIterations;
+  }
+
+  // Ensure webRetrievalParallelFetchLimit has a valid value
+  const webRetrievalParallelFetchLimit = Number(settingsToSanitize.webRetrievalParallelFetchLimit);
+  if (
+    isNaN(webRetrievalParallelFetchLimit) ||
+    webRetrievalParallelFetchLimit < 1 ||
+    webRetrievalParallelFetchLimit > WEB_RETRIEVAL_MAX_PARALLEL_FETCH_LIMIT
+  ) {
+    sanitizedSettings.webRetrievalParallelFetchLimit =
+      DEFAULT_SETTINGS.webRetrievalParallelFetchLimit;
+  } else {
+    sanitizedSettings.webRetrievalParallelFetchLimit = webRetrievalParallelFetchLimit;
   }
 
   // Ensure autonomousAgentEnabledToolIds is an array

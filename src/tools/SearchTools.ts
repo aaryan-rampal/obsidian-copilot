@@ -601,4 +601,6 @@ const webSearchTool = createLangChainTool({
   },
 });
 
+export type { FetchWebPagesResult, RetrievedWebPage, WebPageQuality } from "./fetchWebPages";
+export { fetchAndExtract, fetchWebPagesTool } from "./fetchWebPages";
 export { indexTool, lexicalSearchTool, localSearchTool, semanticSearchTool, webSearchTool };

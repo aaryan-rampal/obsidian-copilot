@@ -45,6 +45,8 @@ import {
   summarizeToolResult,
 } from "./utils/AgentReasoningState";
 import { findDuplicateQuery, stripLeakedRoleLines } from "./utils/queryDeduplication";
+import { webRetrievalState } from "@/tools/webRetrievalState";
+import { buildBudgetNote } from "./utils/fetchBudgetNote";
 
 const AGENT_LOOP_GUIDANCE = `## Agent Behavior
 - You have a limited number of tool calls. Use them wisely.
@@ -652,6 +654,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     } = params;
 
     const maxIterations = getSettings().autonomousAgentMaxIterations;
+    webRetrievalState.reset();
+    let fetchBudgetRemaining = maxIterations;
     const collectedSources: AgentSource[] = [];
     const loopStartTime = Date.now();
 
@@ -834,8 +838,46 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         logToolCall(toolCall, iteration);
 
+        // Budget gate: block fetchWebPages when the per-session fetch budget is exhausted
+        if (toolCall.name === "fetchWebPages") {
+          if (fetchBudgetRemaining <= 0) {
+            const toolMessage = createToolResultMessage(
+              tc.id || generateToolCallId(),
+              tc.name,
+              JSON.stringify({
+                type: "web_retrieval",
+                pages: [],
+                fetchLog: [],
+                terminated: false,
+                budgetMessage: "Fetch budget exhausted. Please synthesize now.",
+              })
+            );
+            messages.push(toolMessage);
+            continue;
+          }
+          fetchBudgetRemaining--;
+        }
+
         // Execute the tool
         const result = await executeSequentialToolCall(toolCall, tools, originalPrompt);
+
+        // Prepend budget note to fetchWebPages results so the model knows how many fetches remain
+        if (toolCall.name === "fetchWebPages" && result.success) {
+          const budgetNote = buildBudgetNote(
+            fetchBudgetRemaining,
+            getSettings().webRetrievalParallelFetchLimit
+          );
+          result.result = budgetNote + "\n\n" + result.result;
+        }
+
+        // Inject terminate message when user has requested early synthesis
+        if (toolCall.name === "fetchWebPages" && webRetrievalState.terminateRequested) {
+          result.result +=
+            "\n\nThe user has asked you to stop researching and respond now. " +
+            "Synthesize what you have. If your answer might feel incomplete, " +
+            "you may briefly mention what you were planning to look up next — " +
+            "but only if the omission would genuinely confuse the user.";
+        }
 
         // Track source info for reasoning summary
         let sourceInfo: LocalSearchSourceInfo | undefined;
