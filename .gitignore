@@ -32,3 +32,5 @@ data.json
 # Development session tracking
 TODO.md
 /docs/plans
+/.worktrees
+/docs/superpowers/specs
